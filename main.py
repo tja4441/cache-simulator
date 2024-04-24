@@ -50,8 +50,8 @@ def main():
 
   # CREATE CACHE
   cache = cu.Cache(size, int(Words_Per_Block), MP, int(Blocks_Per_Set), RP)
-  cache.access(0)
   cache.access(2)
+  cache.access(4)
   cache.print()
   
   # PRINT DATA

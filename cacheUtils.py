@@ -2,19 +2,23 @@ from enum import Enum
 import math
 import random
 
+
 class replacementPolicy(Enum):
   NULL = 0
   RANDOM = 1
   LRU = 2
+
 
 class mappingPolicy(Enum):
   NULL = 0
   DIRECT = 1
   SA = 2
 
+
 class hitStatus(Enum):
   MISS = 0
   HIT = 1
+
 
 # Class representing the cache
 # Contains some information about the cache parameters, as well as an array
@@ -42,22 +46,32 @@ class Cache:
     self.blocksPerSet = blocksPerSet
     self.rP = rP
     self.bytesPerBlock = wordsPerBlock * 4
-    self.numBlocks = nominalSize // self.bytesPerBlock
-    self.numSets = self.numBlocks // self.blocksPerSet
-    self.indexBits = math.ceil(math.log2(self.numSets))
-    self.offsetBits = math.ceil(math.log2(self.bytesPerBlock))
-    self.statusBits = 1 + self.blocksPerSet
-    self.tagBits = 32 - (self.indexBits + self.offsetBits + self.statusBits)
-    self.realSize = nominalSize + self.numBlocks * (self.statusBits +
-                                                    self.tagBits) // 8
-    self.Sets = [Set(self.blocksPerSet, self.wordsPerBlock, 0, 0, self.rP, empty=1) for i in range(self.numSets)]
+    self.numBlocks = nominalSize // (wordsPerBlock * 4)
+    self.numSets = (nominalSize // (wordsPerBlock * 4)) // blocksPerSet
+    self.indexBits = math.ceil(
+        math.log2((nominalSize // (wordsPerBlock * 4)) // blocksPerSet))
+    self.offsetBits = math.ceil(math.log2(wordsPerBlock * 4))
+    self.statusBits = 1 + blocksPerSet
+    self.tagBits = 32 - (math.ceil(
+        math.log2(
+            (nominalSize // (wordsPerBlock * 4)) // blocksPerSet)) + math.ceil(
+                math.log2(wordsPerBlock * 4)) + 1 + blocksPerSet)
+    self.realSize = nominalSize + (nominalSize // (wordsPerBlock * 4)) * (
+        1 + blocksPerSet + 32 -
+        (math.ceil(
+            math.log2((nominalSize // (wordsPerBlock * 4)) // blocksPerSet)) +
+         math.ceil(math.log2(wordsPerBlock * 4)) + 1 + blocksPerSet)) // 8
+    self.Sets = [
+        Set(blocksPerSet, wordsPerBlock, 0, rP, empty=1)
+        for i in range((nominalSize // (wordsPerBlock * 4)) // blocksPerSet)
+    ]
 
   def access(self, wordAddr):
     blockAddr = wordAddr // self.wordsPerBlock
     setAddr = blockAddr % self.numSets
     if self.Sets[setAddr].empty:
       #Set is empty; add block; return miss
-      self.Sets[setAddr].addBlock(wordAddr)
+      self.Sets[setAddr].addBlock(blockAddr)
       return hitStatus.MISS
     else:
       #Set contains at least 1 block; check for hit
@@ -73,7 +87,10 @@ class Cache:
         print(str(i) + ":")
 
   def clear(self):
-    self.Sets = [Set(self.blocksPerSet, self.wordsPerBlock, 0, 0, self.rP, empty=1) for i in range(self.numSets)]
+    self.Sets = [
+        Set(self.blocksPerSet, self.wordsPerBlock, 0, self.rP, empty=1)
+        for i in range(self.numSets)
+    ]
 
 
 # Class representing a Set
@@ -88,20 +105,19 @@ class Set:
 
   Blocks = []
 
-  def __init__(self, blocksPerSet, wordsPerBlock, wordAddress, blockAddr, rP, empty=0):
+  def __init__(self, blocksPerSet, wordsPerBlock, blockAddr, rP, empty=0):
     self.empty = empty
-    if self.empty == 0:
-      self.blocksPerSet = blocksPerSet
-      self.wordsPerBlock = wordsPerBlock
-      self.setAddr = (blockAddr // blocksPerSet)
-      self.replacementPolicy = rP
+    self.blocksPerSet = blocksPerSet
+    self.wordsPerBlock = wordsPerBlock
+    self.setAddr = (blockAddr // blocksPerSet)
+    self.replacementPolicy = rP
 
   def access(self, blockAddr):
     #Check for hit
     for block in self.Blocks:
       if block.blockAddr == blockAddr:
         #hit!
-        if self.rp == replacementPolicy.LRU:
+        if self.rP == replacementPolicy.LRU:
           #Set associative, LRU rp; set LRU bits
           #increment counters of all but accessed block
           for block2 in self.Blocks:
@@ -111,7 +127,7 @@ class Set:
         return hitStatus.HIT
 
     #miss :(
-      if self.mP == mappingPolicy.DIRECT:
+      if self.rP == mappingPolicy.NULL:
         #Direct Mapped; erase block; add new; return miss
         self.Blocks = []
       elif not self.isFull():
@@ -131,7 +147,6 @@ class Set:
           self.eraseRandom()
       self.addBlock(blockAddr)
       return hitStatus.MISS
-            
 
   def isFull(self):
     return len(self.Blocks) == self.blocksPerSet
@@ -151,12 +166,12 @@ class Set:
         break
 
   def eraseRandom(self):
-    index = math.randint(0,self.blocksPerSet - 1)
+    index = random.randint(0, self.blocksPerSet - 1)
     self.Blocks.pop(index)
-
 
   def addBlock(self, blockAddr):
     self.Blocks.append(Block(self.wordsPerBlock, blockAddr))
+    self.empty = 0
 
   def print(self):
     if self.empty != 1:
