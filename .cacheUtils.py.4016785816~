@@ -1,0 +1,137 @@
+from enum import Enum
+import math
+
+
+class replacementPolicy(Enum):
+  NULL = 0
+  RANDOM = 1
+  LRU = 2
+
+
+class mappingPolicy(Enum):
+  NULL = 0
+  DIRECT = 1
+  SA = 2
+
+
+# Class representing the cache
+# Contains some information about the cache parameters, as well as an array
+# of Sets, each of which contains an array of blocks
+class Cache:
+  nominalSize = 0
+  mP = mappingPolicy.NULL
+  numBlocks = 0
+  wordsPerBlock = 0
+  bytesPerBlock = 0
+  numSets = 0
+  blocksPerSet = 0
+  rP = replacementPolicy.NULL
+  indexBits = 0
+  offsetBits = 0
+  statusBits = 0
+  tagBits = 0
+  realSize = 0
+  Sets = []
+
+  def __init__(self, nominalSize, wordsPerBlock, mP, blocksPerSet, rP):
+    self.nominalSize = nominalSize
+    self.wordsPerBlock = wordsPerBlock
+    self.mP = mP
+    self.blocksPerSet = blocksPerSet
+    self.rP = rP
+    self.bytesPerBlock = wordsPerBlock * 4
+    self.numBlocks = nominalSize // self.bytesPerBlock
+    self.numSets = self.numBlocks // self.blocksPerSet
+    self.indexBits = math.ceil(math.log2(self.numSets))
+    self.offsetBits = math.ceil(math.log2(self.bytesPerBlock))
+    self.statusBits = 1 + self.blocksPerSet
+    self.tagBits = 32 - (self.indexBits + self.offsetBits + self.statusBits)
+    self.realSize = nominalSize + self.numBlocks * (self.statusBits +
+                                                    self.tagBits) // 8
+  def access(self, wordAddr):
+    blockAccess = wordAddr//self.wordsPerBlock
+    setAccess = (blockAccess//self.blocksPerSet)%self.numSets
+    blockOffset = blockAccess%self.wordsPerBlock
+    self.Sets[setAccess].access(blockOffset, blockAccess)
+  
+  def print(self):
+    print("Current cache status:")
+    for i in range(self.numSets):
+      try:
+        print(str(i) + ": " + self.Sets[i].print())
+      except(IndexError):
+        print(str(i) + ":")
+
+  def clear(self):
+    self.Sets = []
+
+
+# Class representing a Set
+# Contains some information about the Set parameters, as well as an array
+# of Blocks, each of which contains an array of words
+class Set:
+  blocksPerSet = 0
+  wordsPerBlock = 0
+  blockAddrs = []
+  setAddr = 0
+  rP = replacementPolicy.NULL
+  # Mapping Policy assumed Set Associative
+
+  Blocks = []
+
+  def __init__(self, blocksPerSet, wordsPerBlock, address, rP):
+    self.blocksPerSet = blocksPerSet
+    self.wordsPerBlock = wordsPerBlock
+    self.setAddr = (address // blocksPerSet) // wordsPerBlock
+    self.replacementPolicy = rP
+    for i in range(len(blocksPerSet)):
+      self.blockAddrs.append(self.setAddr * blocksPerSet + i)
+
+  def access(self, blockOffset, blockAddr):
+    if self.rP == replacementPolicy.LRU:
+      accessedOrder = {}
+      for i in range(len(self.Blocks)):
+        accessedOrder[i][0] = self.Blocks[i]
+        accessedOrder[i][1] = self.Blocks[i].accessedCounter
+      lru = sorted(accessedOrder)[len(accessedOrder)-1].value
+      if len(accessedOrder)==0:
+        self.Blocks[blockOffset] = Block(self.wordsPerBlock, blockAddr)
+      else:
+        
+  def print(self):
+    print("S" + str(self.setAddr) + "[", end=" ")
+    for block in self.Blocks:
+      block.print()
+    print("]")
+
+
+# Class representing a Block
+# Contains some information about the block parameters, as well as an array
+# of word addresses, and an integer representing the order of block accesses
+# in the set
+class Block:
+  wordsPerBlock = 0
+  wordAddrs = []
+  blockAddr = 0
+  accessedCounter = 0
+
+  def __init__(self, wordsPerBlock, address):
+    self.wordsPerBlock = wordsPerBlock
+    self.accessedCounter = 0
+    self.blockAddr = address // wordsPerBlock
+    for i in range(wordsPerBlock):
+      self.wordAddrs.append(self.blockAddr * wordsPerBlock + i)
+
+  def print(self):
+    print("B" + str(self.blockAddr) + "[", end=" ")
+    for i in range(self.wordsPerBlock):
+      print("w" + self.wordAddrs[i], end=" ")
+      if (i != self.wordsPerBlock - 1):
+        print(",", end=" ")
+    print("]", end=" ")
+
+  def incrementCounter(self):
+    self.accessedCounter += 1
+
+  def setCounter(self, counterVal):
+    self.accessedCounter = counterVal
