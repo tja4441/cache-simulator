@@ -2,18 +2,19 @@ from enum import Enum
 import math
 import random
 
-
 class replacementPolicy(Enum):
   NULL = 0
   RANDOM = 1
   LRU = 2
-
 
 class mappingPolicy(Enum):
   NULL = 0
   DIRECT = 1
   SA = 2
 
+class hitStatus(Enum):
+  MISS = 0
+  HIT = 1
 
 # Class representing the cache
 # Contains some information about the cache parameters, as well as an array
@@ -52,10 +53,15 @@ class Cache:
     self.Sets = [Set(self.blocksPerSet, self.wordsPerBlock, 0, 0, self.rP, empty=1) for i in range(self.numSets)]
 
   def access(self, wordAddr):
-    blockAccess = wordAddr // self.wordsPerBlock
-    setAddr = blockAccess % self.numSets
-    self.Sets[setAddr].empty = 0
-    self.Sets[setAddr].access(blockAccess)
+    blockAddr = wordAddr // self.wordsPerBlock
+    setAddr = blockAddr % self.numSets
+    if self.Sets[setAddr].empty:
+      #Set is empty; add block; return miss
+      self.Sets[setAddr].addBlock(wordAddr)
+      return hitStatus.MISS
+    else:
+      #Set contains at least 1 block; check for hit
+      self.Sets[setAddr].access(blockAddr)
 
   def print(self):
     print("Current cache status:")
@@ -89,32 +95,68 @@ class Set:
       self.wordsPerBlock = wordsPerBlock
       self.setAddr = (blockAddr // blocksPerSet)
       self.replacementPolicy = rP
-      self.Blocks.append(Block(self.wordsPerBlock,
-                               wordAddress))
 
   def access(self, blockAddr):
-    if self.rP == replacementPolicy.LRU:
-      accessedOrder = []
-      for i in range(len(self.Blocks)):
-        accessedOrder[i] = self.Blocks[i].accessedCounter
-      lruVal = sorted(accessedOrder)[len(accessedOrder) - 1]
-      if self.empty == 1:
-        self.Blocks.append(Block(self.wordsPerBlock, blockAddr))
+    #Check for hit
+    for block in self.Blocks:
+      if block.blockAddr == blockAddr:
+        #hit!
+        if self.rp == replacementPolicy.LRU:
+          #Set associative, LRU rp; set LRU bits
+          #increment counters of all but accessed block
+          for block2 in self.Blocks:
+            if block2 != block:
+              block2.incrementCounter()
+        #Direct Mapped or Set Associative Random rp
+        return hitStatus.HIT
+
+    #miss :(
+      if self.mP == mappingPolicy.DIRECT:
+        #Direct Mapped; erase block; add new; return miss
+        self.Blocks = []
+      elif not self.isFull():
+        #Set Associative, non-full set
+        if self.rP == replacementPolicy.LRU:
+          #increment blocks counter, add new, return miss
+          for block in self.Blocks:
+            block.incrementCounter()
+        #else Random, non-full set; add new, return miss
       else:
-        for i in range(len(self.Blocks)):
-          if self.Blocks[i].accessedCounter == lruVal:
-            self.Blocks[i] = Block(self.wordsPerBlock, blockAddr)
-          else:
-            self.Blocks[i].incrementCounter()
-    if self.rP == replacementPolicy.RANDOM:
-      rand = random.randint(0, 3)
-      if len(self.Blocks) == self.blocksPerSet:
-        self.Blocks[rand] = Block(self.wordsPerBlock, blockAddr)
-      else:
-        self.Blocks.append(Block(self.wordsPerBlock, blockAddr))
-    else:  # Direct mapped
-      self.Blocks.clear()
-      self.Blocks.append(Block(self.wordsPerBlock, blockAddr))
+        #Set associative, set is full
+        if self.rP == replacementPolicy.LRU:
+          #LRU, erase lru block, add new, return miss
+          self.eraseLRU()
+        else:
+          #Random, erase random block, add new, return miss
+          self.eraseRandom()
+      self.addBlock(blockAddr)
+      return hitStatus.MISS
+            
+
+  def isFull(self):
+    return len(self.Blocks) == self.blocksPerSet
+
+  def eraseLRU(self):
+    #Find LRU block
+    #Counters will be unique, so loop through all
+    # and save highest.
+    highestCounter = 0
+    for block in self.Blocks:
+      if block.accessedCounter > highestCounter:
+        highestCounter = block.accessedCounter
+    #Erase it
+    for block in self.Blocks:
+      if block.accessedCounter == highestCounter:
+        self.Blocks.remove(block)
+        break
+
+  def eraseRandom(self):
+    index = math.randint(0,self.blocksPerSet - 1)
+    self.Blocks.pop(index)
+
+
+  def addBlock(self, blockAddr):
+    self.Blocks.append(Block(self.wordsPerBlock, blockAddr))
 
   def print(self):
     if self.empty != 1:
