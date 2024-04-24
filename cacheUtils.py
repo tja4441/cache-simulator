@@ -46,24 +46,20 @@ class Cache:
     self.blocksPerSet = blocksPerSet
     self.rP = rP
     self.bytesPerBlock = wordsPerBlock * 4
-    self.numBlocks = nominalSize // (wordsPerBlock * 4)
-    self.numSets = (nominalSize // (wordsPerBlock * 4)) // blocksPerSet
-    self.indexBits = math.ceil(
-        math.log2((nominalSize // (wordsPerBlock * 4)) // blocksPerSet))
-    self.offsetBits = math.ceil(math.log2(wordsPerBlock * 4))
-    self.statusBits = 1 + blocksPerSet
-    self.tagBits = 32 - (math.ceil(
-        math.log2(
-            (nominalSize // (wordsPerBlock * 4)) // blocksPerSet)) + math.ceil(
-                math.log2(wordsPerBlock * 4)) + 1 + blocksPerSet)
-    self.realSize = nominalSize + (nominalSize // (wordsPerBlock * 4)) * (
-        1 + blocksPerSet + 32 -
-        (math.ceil(
-            math.log2((nominalSize // (wordsPerBlock * 4)) // blocksPerSet)) +
-         math.ceil(math.log2(wordsPerBlock * 4)) + 1 + blocksPerSet)) // 8
+    self.numBlocks = nominalSize // (self.bytesPerBlock)
+    self.numSets = (self.numBlocks) // blocksPerSet
+    self.indexBits = math.ceil(math.log2(self.numSets))
+    self.offsetBits = math.ceil(math.log2(self.bytesPerBlock))
+    if mP == mappingPolicy.DIRECT:
+      self.statusBits = 1
+    else:
+      self.statusBits = 1 + blocksPerSet
+    self.tagBits = 32 - self.indexBits - self.offsetBits
+    self.realSize = nominalSize + (self.numBlocks *
+                                   (self.statusBits + self.tagBits)) * 4 // 32
     self.Sets = [
-        Set(blocksPerSet, wordsPerBlock, 0, rP, empty=1)
-        for i in range((nominalSize // (wordsPerBlock * 4)) // blocksPerSet)
+        Set(blocksPerSet, wordsPerBlock, 0, rP, self.numSets, empty=1)
+        for i in range(self.numSets)
     ]
 
   def access(self, wordAddr):
@@ -75,21 +71,28 @@ class Cache:
       return hitStatus.MISS
     else:
       #Set contains at least 1 block; check for hit
-      self.Sets[setAddr].access(blockAddr)
+      return self.Sets[setAddr].access(blockAddr)
 
   def print(self):
-    print("Current cache status:")
-    for i in range(self.numSets):
-      if self.Sets[i].empty == 0:
-        print(str(i) + ": ", end=" ")
-        self.Sets[i].print()
-      else:
-        print(str(i) + ":")
+    if(self.numSets > 32):
+      print("Cache too large to print.")
+    else:
+      print("Current cache status:")
+      for i in range(self.numSets):
+        if self.Sets[i].empty == 0:
+          print(str(i) + ": ", end=" ")
+          self.Sets[i].print()
+        else:
+          print(str(i) + ":")
 
   def clear(self):
     self.Sets = [
-        Set(self.blocksPerSet, self.wordsPerBlock, 0, self.rP, empty=1)
-        for i in range(self.numSets)
+        Set(self.blocksPerSet,
+            self.wordsPerBlock,
+            0,
+            self.rP,
+            self.numSets,
+            empty=1) for i in range(self.numSets)
     ]
 
 
@@ -97,20 +100,21 @@ class Cache:
 # Contains some information about the Set parameters, as well as an array
 # of Blocks, each of which contains an array of words
 class Set:
-  empty = 1
-  blocksPerSet = 0
-  wordsPerBlock = 0
-  setAddr = 0
-  rP = replacementPolicy.NULL
 
-  Blocks = []
-
-  def __init__(self, blocksPerSet, wordsPerBlock, blockAddr, rP, empty=0):
+  def __init__(self,
+               blocksPerSet,
+               wordsPerBlock,
+               blockAddr,
+               rP,
+               numSets,
+               empty=0):
+    self.Blocks = []
     self.empty = empty
     self.blocksPerSet = blocksPerSet
     self.wordsPerBlock = wordsPerBlock
-    self.setAddr = (blockAddr // blocksPerSet)
-    self.replacementPolicy = rP
+    self.setAddr = blockAddr % numSets
+    self.numSets = numSets
+    self.rP = rP
 
   def access(self, blockAddr):
     #Check for hit
@@ -127,26 +131,26 @@ class Set:
         return hitStatus.HIT
 
     #miss :(
-      if self.rP == mappingPolicy.NULL:
-        #Direct Mapped; erase block; add new; return miss
-        self.Blocks = []
-      elif not self.isFull():
-        #Set Associative, non-full set
-        if self.rP == replacementPolicy.LRU:
-          #increment blocks counter, add new, return miss
-          for block in self.Blocks:
-            block.incrementCounter()
-        #else Random, non-full set; add new, return miss
+    if self.rP == mappingPolicy.NULL:
+      #Direct Mapped; erase block; add new; return miss
+      self.Blocks.clear()
+    elif not self.isFull():
+      #Set Associative, non-full set
+      if self.rP == replacementPolicy.LRU:
+        #increment blocks counter, add new, return miss
+        for block in self.Blocks:
+          block.incrementCounter()
+      #else Random, non-full set; add new, return miss
+    else:
+      #Set associative, set is full
+      if self.rP == replacementPolicy.LRU:
+        #LRU, erase lru block, add new, return miss
+        self.eraseLRU()
       else:
-        #Set associative, set is full
-        if self.rP == replacementPolicy.LRU:
-          #LRU, erase lru block, add new, return miss
-          self.eraseLRU()
-        else:
-          #Random, erase random block, add new, return miss
-          self.eraseRandom()
-      self.addBlock(blockAddr)
-      return hitStatus.MISS
+        #Random, erase random block, add new, return miss
+        self.eraseRandom()
+    self.addBlock(blockAddr)
+    return hitStatus.MISS
 
   def isFull(self):
     return len(self.Blocks) == self.blocksPerSet
@@ -171,6 +175,7 @@ class Set:
 
   def addBlock(self, blockAddr):
     self.Blocks.append(Block(self.wordsPerBlock, blockAddr))
+    self.setAddr = blockAddr % self.numSets
     self.empty = 0
 
   def print(self):
@@ -190,15 +195,12 @@ class Set:
 # of word addresses, and an integer representing the order of block accesses
 # in the set
 class Block:
-  wordsPerBlock = 0
-  wordAddrs = []
-  blockAddr = 0
-  accessedCounter = 0
 
   def __init__(self, wordsPerBlock, blockAddress):
     self.wordsPerBlock = wordsPerBlock
     self.accessedCounter = 0
     self.blockAddr = blockAddress
+    self.wordAddrs = []
     for i in range(wordsPerBlock):
       self.wordAddrs.append(self.blockAddr * wordsPerBlock + i)
 

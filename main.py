@@ -50,9 +50,6 @@ def main():
 
   # CREATE CACHE
   cache = cu.Cache(size, int(Words_Per_Block), MP, int(Blocks_Per_Set), RP)
-  cache.access(2)
-  cache.access(4)
-  cache.print()
   
   # PRINT DATA
   print("The cache nominal size is: " + str(cache.nominalSize) + " bytes")
@@ -85,36 +82,41 @@ def main():
             cache.clear()
           else:
             Word_address_int = int(DefaultIn)
-            Index = (Word_address_int //
-                     int(Words_Per_Block)) % cache.numBlocks
+            hitStatus = cache.access(Word_address_int)
+            print("Cache access of " + str(Word_address_int) + " was a " + hitStatus.name)
           cache.print()
       if OpMode.lower() == "sim":
         # SIMULATION MODE
         # CREATE RANDOM ACCESSES
         Accesses = []
-        if MP == "SA":
-          Limit = int(size / int(Blocks_Per_Set))
-        else:
-          Limit = int(size / int(Bytes_Per_Block))
-        Accesses.append(random.randint(0, Limit))
+        Accesses.append(random.randint(0, cache.nominalSize))
         NumAccess = input("Enter the number of accesses: ")
         Locality = float(input("Enter the locality (%): "))
         for i in range(int(NumAccess) - 1):
           isLocal = random.random()
           if isLocal < Locality:
-            Accesses.append((Accesses[i - 1] + 1) % Limit)
+            Accesses.append((Accesses[i - 1] + 1) % cache.nominalSize)
           else:
-            Accesses.append(random.randint(0, Limit))
+            Accesses.append(random.randint(0, cache.nominalSize))
         # SIMULATE CACHE
-        print("Cache Initial Condition:")
         cache.print()
+        hits = 0
         for access in Accesses:
           # State which address is being accessed
           # Access Cache
           # Track hits & misses
           # report hit rate & miss rate
-          print("accessing" + access)
-
+          print("accessing" + " " + str(access))
+          hits += cache.access(access).value
+        hitrate=hits*100//int(NumAccess)
+        missrate=100-hitrate
+        print("")
+        cache.print()
+        print("")
+        print("hits:",str(hits))
+        print("misses:",str(int(NumAccess)-hits))
+        print("hitrate:",str(hitrate),"%")
+        print("missrate:",str(missrate),"%")
 
 if __name__ == "__main__":
   main()
