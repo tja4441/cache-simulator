@@ -68,7 +68,7 @@ def main():
   
   # Choose Operating Mode
   while (True):
-    OpMode = input("Selct an operating mode (Default/Sim/End): ")
+    OpMode = input("Select an operating mode (Default/Sim/End): ")
     if OpMode.lower() == "end":
       break
     else:
@@ -86,37 +86,45 @@ def main():
             print("Cache access of " + str(Word_address_int) + " was a " + hitStatus.name)
           cache.print()
       if OpMode.lower() == "sim":
-        # SIMULATION MODE
-        # CREATE RANDOM ACCESSES
-        Accesses = []
-        Accesses.append(random.randint(0, cache.nominalSize))
-        NumAccess = input("Enter the number of accesses: ")
-        Locality = float(input("Enter the locality (%): "))
-        for i in range(int(NumAccess) - 1):
-          isLocal = random.random()
-          if isLocal < Locality:
-            Accesses.append((Accesses[i - 1] + 1) % cache.nominalSize)
+        while True:
+          SimIn = input("Enter 'begin', 'clear', or 'exit': ")
+          if SimIn.lower() == "exit":
+            break
+          elif SimIn.lower() == "clear":
+            cache.clear()
+            cache.print()
           else:
+            # SIMULATION MODE
+            # CREATE RANDOM ACCESSES
+            Accesses = []
             Accesses.append(random.randint(0, cache.nominalSize))
-        # SIMULATE CACHE
-        cache.print()
-        hits = 0
-        for access in Accesses:
-          # State which address is being accessed
-          # Access Cache
-          # Track hits & misses
-          # report hit rate & miss rate
-          print("accessing" + " " + str(access))
-          hits += cache.access(access).value
-        hitrate=hits*100//int(NumAccess)
-        missrate=100-hitrate
-        print("")
-        cache.print()
-        print("")
-        print("hits:",str(hits))
-        print("misses:",str(int(NumAccess)-hits))
-        print("hitrate:",str(hitrate),"%")
-        print("missrate:",str(missrate),"%")
+            NumAccess = input("Enter the number of accesses: ")
+            Locality = float(input("Enter the locality (%): "))
+            for i in range(int(NumAccess) - 1):
+              isLocal = random.random()
+              if isLocal < Locality:
+                Accesses.append(Accesses[i - 1])
+              else:
+                Accesses.append(random.randint(0, cache.nominalSize))
+            # SIMULATE CACHE
+            cache.print()
+            hits = 0
+            for access in Accesses:
+              # State which address is being accessed
+              # Access Cache
+              # Track hits & misses
+              # report hit rate & miss rate
+              print("accessing" + " " + str(access))
+              hits += cache.access(access).value
+            hitrate=hits*100//int(NumAccess)
+            missrate=100-hitrate
+            print("")
+            cache.print()
+            print("")
+            print("hits:",str(hits))
+            print("misses:",str(int(NumAccess)-hits))
+            print("hitrate:",str(hitrate),"%")
+            print("missrate:",str(missrate),"%")
 
 if __name__ == "__main__":
   main()
